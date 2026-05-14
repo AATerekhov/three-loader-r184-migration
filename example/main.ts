@@ -1,4 +1,4 @@
-import { ClipMode, PointCloudOctree } from '../src';
+import { ClipMode, PointCloudOctree, PointColorType, PointSizeType } from '../src';
 import { Viewer } from './viewer';
 
 require('./main.css');
@@ -6,6 +6,10 @@ require('./main.css');
 const targetEl: HTMLDivElement = document.createElement('div');
 targetEl.className = 'container';
 document.body.appendChild(targetEl);
+
+const controlsEl: HTMLDivElement = document.createElement('div');
+controlsEl.className = 'controls';
+document.body.appendChild(controlsEl);
 
 const viewer: Viewer = new Viewer();
 viewer.initialize(targetEl);
@@ -37,6 +41,10 @@ interface LoadedState {
   [key: string]: boolean;
 }
 
+interface LoadingState {
+  [key: string]: boolean;
+}
+
 const pointClouds: PointClouds = {
   v1: undefined,
   v2: undefined,
@@ -49,11 +57,23 @@ const loaded: LoadedState = {
   splats: false,
 };
 
+const loading: LoadingState = {
+  v1: false,
+  v2: false,
+  splats: false,
+};
+
 function createButton(text: string, onClick: (e: MouseEvent) => void): HTMLButtonElement {
   const button: HTMLButtonElement = document.createElement('button');
   button.textContent = text;
   button.addEventListener('click', onClick);
   return button;
+}
+
+function createStatus(): HTMLSpanElement {
+  const status = document.createElement('span');
+  status.className = 'load-status';
+  return status;
 }
 
 function createSlider(version: string): HTMLInputElement {
@@ -63,6 +83,7 @@ function createSlider(version: string): HTMLInputElement {
   slider.max = '1000000';
   slider.value = '1000000';
   slider.className = 'budget-slider';
+  slider.title = 'Point budget';
   slider.addEventListener('change', () => {
     const cloud = pointClouds[version];
     if (!cloud) {
@@ -75,11 +96,40 @@ function createSlider(version: string): HTMLInputElement {
   return slider;
 }
 
-function setupPointCloud(version: 'v1' | 'v2' | 'splats', file: string, url: string): void {
-  if (loaded[version]) {
+function createPointSizeSlider(version: string): HTMLInputElement {
+  const slider: HTMLInputElement = document.createElement('input');
+  slider.type = 'range';
+  slider.min = '1';
+  slider.max = '16';
+  slider.step = '1';
+  slider.value = '4';
+  slider.className = 'point-size-slider';
+  slider.title = 'Point size';
+  slider.addEventListener('input', () => {
+    const cloud = pointClouds[version];
+    if (!cloud) {
+      return;
+    }
+
+    const size = parseInt(slider.value, 10);
+    cloud.material.size = size;
+    viewer.setDebugPointSize(cloud, size);
+    viewer.update(0);
+  });
+  return slider;
+}
+
+function setupPointCloud(
+  version: 'v1' | 'v2' | 'splats',
+  file: string,
+  url: string,
+  setStatus: (message: string) => void,
+): void {
+  if (loaded[version] || loading[version]) {
     return;
   }
-  loaded[version] = true;
+  loading[version] = true;
+  setStatus('Loading...');
 
   //TODO: check for mobile, not noly IOS
   function isIOS() {
@@ -88,26 +138,32 @@ function setupPointCloud(version: 'v1' | 'v2' | 'splats', file: string, url: str
   }
 
   viewer
-    .load(file, url, version == 'splats' ? 'v2' : version, !isIOS())
+    .load(file, url, version === 'splats' ? 'v2' : version, !isIOS())
     .then((pco) => {
       pointClouds[version] = pco;
-      pco.material.size = 1.0;
+      loaded[version] = true;
+      setStatus('Loaded');
+      pco.material.size = 4.0;
+      pco.material.pointSizeType = PointSizeType.FIXED;
+      pco.material.pointColorType = PointColorType.COLOR;
+      pco.material.color.set(0xffd166);
 
-      pco.material.pointColorType = 0;
-
-      pco.material.clipMode = ClipMode.CLIP_HORIZONTALLY;
-      pco.material.clipExtent = [0.0, 0.0, 1.0, 1.0];
-      pco.position.set(0, 0, 0);
-
-      const camera = viewer.camera;
-      camera.up.set(0, 0, 1);
-      camera.far = 1000;
-      camera.updateProjectionMatrix();
-      camera.position.set(-4, 4, 16);
+      pco.material.clipMode = ClipMode.DISABLED;
+      pco.showBoundingBox = true;
 
       viewer.add(pco);
+      viewer.fitToPointCloud(pco);
+      viewer.trackPointCloudStatus(pco, setStatus);
     })
-    .catch((err) => console.error(err));
+    .catch((err) => {
+      loaded[version] = false;
+      const message = err instanceof Error ? err.message : String(err);
+      setStatus(`Error: ${message}`);
+      console.error(err);
+    })
+    .finally(() => {
+      loading[version] = false;
+    });
 }
 
 function setupUI(cfg: PointCloudsConfig): void {
@@ -120,6 +176,11 @@ function setupUI(cfg: PointCloudsConfig): void {
   updateBtn.style.backgroundColor = '#00ff00';
 
   const slider = createSlider(cfg.version);
+  const pointSizeSlider = createPointSizeSlider(cfg.version);
+  const status = createStatus();
+  const setStatus = (message: string) => {
+    status.textContent = message;
+  };
 
   const unloadBtn = createButton('Unload', () => {
     if (!loaded[cfg.version]) {
@@ -136,20 +197,23 @@ function setupUI(cfg: PointCloudsConfig): void {
 
     viewer.enableUpdate = true;
     updateBtn.style.backgroundColor = '#00ff00';
+    setStatus('Unloaded');
   });
 
   const loadBtn = createButton('Load', (e: MouseEvent) => {
     e.stopPropagation();
-    setupPointCloud(cfg.version, cfg.file, cfg.url);
+    setupPointCloud(cfg.version, cfg.file, cfg.url, setStatus);
   });
 
   const btnContainer: HTMLDivElement = document.createElement('div');
-  btnContainer.className = 'btn-container-' + cfg.version;
-  document.body.appendChild(btnContainer);
+  btnContainer.className = `btn-container btn-container-${cfg.version}`;
+  controlsEl.appendChild(btnContainer);
   btnContainer.appendChild(unloadBtn);
   btnContainer.appendChild(loadBtn);
   btnContainer.append(updateBtn);
   btnContainer.appendChild(slider);
+  btnContainer.appendChild(pointSizeSlider);
+  btnContainer.appendChild(status);
 }
 
 examplePointClouds.forEach(setupUI);

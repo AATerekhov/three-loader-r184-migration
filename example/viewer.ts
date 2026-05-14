@@ -1,6 +1,9 @@
 import {
+  AxesHelper,
+  BufferAttribute,
   Mesh,
   PerspectiveCamera,
+  PointsMaterial,
   Scene,
   Vector2,
   WebGLRenderer,
@@ -12,6 +15,8 @@ import {
   FloatType,
   RGFormat,
   Vector3,
+  Color,
+  GridHelper,
 } from 'three';
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
@@ -74,6 +79,8 @@ export class Viewer {
 
   private elapsedTime: number = 0;
   private raycaster = new Raycaster();
+  private debugPointMaterials = new WeakMap<PointCloudOctree, PointsMaterial>();
+  private fittedPointClouds = new WeakSet<PointCloudOctree>();
 
   //Max amount of points available to render harmonics inside a 4096 x 4096 texture
   //anything above 2.300.000 particles will require a higher texture and could break.
@@ -84,10 +91,16 @@ export class Viewer {
       return;
     }
 
+    this.camera.up.set(0, 0, 1);
     this.potree_v2.pointBudget = this.pointBudget;
 
     //setup the splats manager
     this.globalScene = new Scene();
+    this.scene.background = new Color(0x20242a);
+    const grid = new GridHelper(20, 20, 0x5f6875, 0x333941);
+    grid.rotation.x = Math.PI / 2;
+    this.scene.add(grid);
+    this.scene.add(new AxesHelper(2));
 
     this.IDRenderTarget = new WebGLRenderTarget(1, 1, {
       minFilter: NearestFilter,
@@ -113,7 +126,14 @@ export class Viewer {
     targetEl.appendChild(this.renderer.domElement);
 
     this.cameraControls = new OrbitControls(this.camera, this.targetEl);
-    this.cameraControls.target.set(9, 3, -6.5);
+    this.cameraControls.target.set(0, 0, 0);
+    this.cameraControls.enableDamping = true;
+    this.cameraControls.dampingFactor = 0.08;
+    this.cameraControls.rotateSpeed = 0.65;
+    this.cameraControls.zoomSpeed = 1.2;
+    this.cameraControls.panSpeed = 0.8;
+    this.cameraControls.screenSpacePanning = false;
+    this.cameraControls.update();
 
     this.resize();
     window.addEventListener('resize', this.resize);
@@ -130,7 +150,7 @@ export class Viewer {
   updateCameraTarget(e: any) {
     if (!this.pointClouds[0]?.splatsMesh?.splatsEnabled) return;
 
-    let clickTime = Date.now();
+    const clickTime = Date.now();
     let deltaTime = clickTime - this.elapsedTime;
 
     if (deltaTime < 200) {
@@ -150,7 +170,7 @@ export class Viewer {
       const splatData = this.pointClouds[0].splatsMesh.getSplatData(globalID, nodeID);
 
       if (splatData != null) {
-        let scale = splatData.scale;
+        const scale = splatData.scale;
         if (scale.x === 0) scale.x = 0.0001;
         if (scale.y === 0) scale.y = 0.0001;
         if (scale.z === 0) scale.z = 0.0001;
@@ -163,7 +183,7 @@ export class Viewer {
         this.raycastSplat.updateMatrix();
         this.raycastSplat.updateMatrixWorld();
 
-        let mousePosition = new Vector2(
+        const mousePosition = new Vector2(
           e.clientX / window.innerWidth,
           e.clientY / window.innerHeight,
         );
@@ -237,6 +257,65 @@ export class Viewer {
     this.pointClouds.push(pco);
   }
 
+  trackPointCloudStatus(pointCloud: PointCloudOctree, setStatus: (message: string) => void): void {
+    const updateStatus = () => {
+      if (pointCloud.disposed) {
+        return;
+      }
+
+      const firstNode = pointCloud.visibleNodes[0];
+      const position = firstNode?.sceneNode.geometry.getAttribute('position');
+      const root = pointCloud.pcoGeometry.root;
+      let geometryLoaded = 0;
+      let geometryLoading = 0;
+      let geometryFailed = 0;
+
+      pointCloud.pcoGeometry.root.traverse((node) => {
+        if (node.loaded) {
+          geometryLoaded++;
+        }
+        if (node.loading) {
+          geometryLoading++;
+        }
+        if (node.failed) {
+          geometryFailed++;
+        }
+      });
+
+      const sample =
+        position && position.count > 0
+          ? ` | first: ${position.getX(0).toFixed(2)}, ${position.getY(0).toFixed(2)}, ${position.getZ(0).toFixed(2)}`
+          : '';
+      setStatus(
+        `Loaded | visible points: ${pointCloud.numVisiblePoints} | render nodes: ${pointCloud.visibleNodes.length} | geometry loaded/loading/failed: ${geometryLoaded}/${geometryLoading}/${geometryFailed} | root loaded: ${root.loaded} | loading: ${root.loading} | failed: ${root.failed}${sample}`,
+      );
+      window.setTimeout(updateStatus, 1000);
+    };
+
+    updateStatus();
+  }
+
+  fitToPointCloud(pointCloud: PointCloudOctree): void {
+    const box = pointCloud.getBoundingBoxWorld();
+    const center = box.getCenter(new Vector3());
+    const size = box.getSize(new Vector3());
+    const radius = Math.max(size.x, size.y, size.z, 1);
+    const distance = radius / Math.tan((this.camera.fov * Math.PI) / 360);
+
+    this.camera.up.set(0, 0, 1);
+    this.camera.near = Math.max(distance / 1000, 0.01);
+    this.camera.far = Math.max(distance * 10, 1000);
+    this.camera.position.set(
+      center.x - distance * 0.8,
+      center.y - distance * 0.8,
+      center.z + distance * 0.6,
+    );
+    this.camera.lookAt(center);
+    this.camera.updateProjectionMatrix();
+    this.cameraControls.target.copy(center);
+    this.cameraControls.update();
+  }
+
   disposePointCloud(pointCloud: PointCloudOctree): void {
     this.scene.remove(pointCloud);
     pointCloud.dispose();
@@ -265,6 +344,68 @@ export class Viewer {
 
     this.potree_v1.updatePointClouds(this.pointClouds, this.camera, this.renderer);
     this.potree_v2.updatePointClouds(this.pointClouds, this.camera, this.renderer);
+
+    for (const pointCloud of this.pointClouds) {
+      for (const node of pointCloud.visibleNodes) {
+        this.ensureDebugColorAttribute(node.sceneNode.geometry);
+        node.sceneNode.material = this.getDebugPointMaterial(pointCloud);
+        node.sceneNode.onBeforeRender = () => {};
+      }
+
+      if (pointCloud.visibleNodes.length > 0 && !this.fittedPointClouds.has(pointCloud)) {
+        this.fitToPointCloud(pointCloud);
+        this.fittedPointClouds.add(pointCloud);
+      }
+    }
+  }
+
+  setDebugPointSize(pointCloud: PointCloudOctree, size: number): void {
+    const material = this.getDebugPointMaterial(pointCloud);
+    material.size = size;
+    material.needsUpdate = true;
+  }
+
+  private getDebugPointMaterial(pointCloud: PointCloudOctree): PointsMaterial {
+    let material = this.debugPointMaterials.get(pointCloud);
+
+    if (!material) {
+      const color = this.debugPointMaterialsCount() % 2 === 0 ? 0xffd166 : 0x4cc9f0;
+      material = new PointsMaterial({
+        color,
+        size: 4,
+        vertexColors: true,
+        sizeAttenuation: false,
+        depthTest: false,
+        depthWrite: false,
+      });
+      this.debugPointMaterials.set(pointCloud, material);
+    }
+
+    return material;
+  }
+
+  private ensureDebugColorAttribute(geometry: any): void {
+    if (geometry.getAttribute('color')) {
+      return;
+    }
+
+    const rgba = geometry.getAttribute('rgba');
+    if (!rgba) {
+      return;
+    }
+
+    const colors = new Uint8Array(rgba.count * 3);
+    for (let i = 0; i < rgba.count; i++) {
+      colors[i * 3] = Math.round(rgba.getX(i) * 255);
+      colors[i * 3 + 1] = Math.round(rgba.getY(i) * 255);
+      colors[i * 3 + 2] = Math.round(rgba.getZ(i) * 255);
+    }
+
+    geometry.setAttribute('color', new BufferAttribute(colors, 3, true));
+  }
+
+  private debugPointMaterialsCount(): number {
+    return this.pointClouds.filter((pointCloud) => this.debugPointMaterials.has(pointCloud)).length;
   }
 
   /**

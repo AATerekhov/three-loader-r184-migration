@@ -1,4 +1,4 @@
 import { handleMessage } from './binary-decoder-worker-internal';
 
 /*eslint-disable */
-onmessage = handleMessage;
+self.onmessage = handleMessage;

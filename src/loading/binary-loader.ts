@@ -50,7 +50,7 @@ export class BinaryLoader {
 
   public static readonly WORKER_POOL = new WorkerPool(
     32,
-    new Worker(new URL('../workers/binary-decoder.worker.js', import.meta.url)),
+    () => new Worker(new URL('../workers/binary-decoder.worker.js', import.meta.url)),
   );
 
   constructor({
@@ -88,7 +88,7 @@ export class BinaryLoader {
       .then((okRes) => okRes.arrayBuffer())
       .then((buffer) => handleEmptyBuffer(buffer))
       .then((okBuffer) => {
-        return new Promise((resolve) => this.parse(node, okBuffer, resolve));
+        return new Promise<void>((resolve, reject) => this.parse(node, okBuffer, resolve, reject));
       });
   }
 
@@ -105,6 +105,7 @@ export class BinaryLoader {
     node: PointCloudOctreeGeometryNode,
     buffer: ArrayBuffer,
     resolve: () => void,
+    reject: (reason?: unknown) => void,
   ): void {
     if (this.disposed) {
       resolve();
@@ -112,6 +113,20 @@ export class BinaryLoader {
     }
 
     BinaryLoader.WORKER_POOL.getWorker().then((autoTerminatingWorker) => {
+      const releaseWorker = () => {
+        BinaryLoader.WORKER_POOL.releaseWorker(autoTerminatingWorker);
+      };
+
+      autoTerminatingWorker.worker.onerror = (event) => {
+        releaseWorker();
+        reject(event.error || event.message);
+      };
+
+      autoTerminatingWorker.worker.onmessageerror = (event) => {
+        releaseWorker();
+        reject(event);
+      };
+
       const pointAttributes = node.pcoGeometry.pointAttributes;
       const numPoints = buffer.byteLength / pointAttributes.byteSize;
 
@@ -122,7 +137,7 @@ export class BinaryLoader {
       autoTerminatingWorker.worker.onmessage = (e: WorkerResponse) => {
         if (this.disposed) {
           resolve();
-          BinaryLoader.WORKER_POOL.releaseWorker(autoTerminatingWorker);
+          releaseWorker();
           return;
         }
 
@@ -145,7 +160,7 @@ export class BinaryLoader {
 
         this.callbacks.forEach((callback) => callback(node));
         resolve();
-        BinaryLoader.WORKER_POOL.releaseWorker(autoTerminatingWorker);
+        releaseWorker();
       };
 
       const message = {

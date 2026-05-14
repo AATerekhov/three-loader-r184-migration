@@ -70,6 +70,8 @@ export class NodeLoader {
       node.tightBoundingBox = this.getTightBoundingBox(data.tightBoundingBox);
     } catch (e) {
       node.loaded = false;
+      node.failed = true;
+      console.error(`Failed to load octree node ${node.name}`, e);
     } finally {
       node.loading = false;
       node.octreeGeometry.numNodesLoading--;

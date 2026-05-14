@@ -42,7 +42,7 @@ export class WorkerPool {
 
   constructor(
     public maxWorkers: number,
-    private workerType: any,
+    private createWorker: () => Worker,
   ) {}
 
   /**
@@ -54,7 +54,7 @@ export class WorkerPool {
     if (this.poolSize < this.maxWorkers) {
       this.poolSize++;
       return Promise.resolve(
-        new AutoTerminatingWorker(new this.workerType(), WorkerPool.POOL_MAX_IDLE),
+        new AutoTerminatingWorker(this.createWorker(), WorkerPool.POOL_MAX_IDLE),
       );
     } else {
       return this.pool.dequeue().then((worker) => {
