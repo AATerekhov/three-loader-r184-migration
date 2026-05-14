@@ -86,5 +86,17 @@ export default [
       'no-console': 'off',
     },
   },
+  {
+    files: ['webpack.config*.js'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      sourceType: 'commonjs',
+      globals: {
+        __dirname: 'readonly',
+        module: 'readonly',
+        require: 'readonly',
+      },
+    },
+  },
   prettierConfig,
 ];

@@ -28,7 +28,7 @@ module.exports = {
         exclude: /node_modules/,
       },
 
-      { test: /\.(vs|fs|glsl|vert|frag)$/, loader: 'raw-loader' },
+      { test: /\.(vs|fs|glsl|vert|frag)$/i, type: 'asset/source' },
     ],
   },
   plugins: [],

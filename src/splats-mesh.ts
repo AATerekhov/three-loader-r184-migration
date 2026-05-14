@@ -26,6 +26,8 @@ import {
 
 import { PointCloudMaterial } from './materials';
 import { createSortWorker } from './workers/SortWorker';
+import vertexSplatsSource from './materials/shaders/splats.vert';
+import fragmentSplatsSource from './materials/shaders/splats.frag';
 
 const DELAYED_FRAMES = 2;
 export class SplatsMesh extends Object3D {
@@ -229,8 +231,8 @@ export class SplatsMesh extends Object3D {
       // Global mesh used to setup the global rendering of the points
       const shader = new ShaderMaterial({
         glslVersion: GLSL3,
-        vertexShader: require('./materials/shaders/splats.vert').default,
-        fragmentShader: require('./materials/shaders/splats.frag').default,
+        vertexShader: vertexSplatsSource,
+        fragmentShader: fragmentSplatsSource,
         transparent: true,
         depthTest: true,
         depthWrite: false,

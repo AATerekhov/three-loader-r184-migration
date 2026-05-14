@@ -11,16 +11,13 @@ export enum WorkerType {
 function createWorker(type: WorkerType): Worker {
   switch (type) {
     case WorkerType.DECODER_WORKER: {
-      const DecoderWorker = require('./decoder.worker.js').default;
-      return new DecoderWorker();
+      return new Worker(new URL('./decoder.worker.js', import.meta.url));
     }
     case WorkerType.DECODER_WORKER_GLTF: {
-      const DecoderWorker_GLTF = require('./gltf-decoder.worker.js').default;
-      return new DecoderWorker_GLTF();
+      return new Worker(new URL('./gltf-decoder.worker.js', import.meta.url));
     }
     case WorkerType.DECODER_WORKER_SPLATS: {
-      const DecoderWorker_GLTF = require('./gltf-splats-decoder.worker.js').default;
-      return new DecoderWorker_GLTF();
+      return new Worker(new URL('./gltf-splats-decoder.worker.js', import.meta.url));
     }
     default:
       throw new Error('Unknown worker type');

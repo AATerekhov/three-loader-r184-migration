@@ -47,6 +47,9 @@ import {
   generateGradientTexture,
 } from './texture-generation';
 import { IClassification, IGradient, IUniform } from './types';
+import { PotreeDefaultAttributeValues } from './values/potree-default-attribute-values';
+import vertexShaderSource from './shaders/pointcloud.vert';
+import fragmentShaderSource from './shaders/pointcloud.frag';
 
 export interface IPointCloudMaterialParameters {
   size: number;
@@ -347,9 +350,11 @@ export class PointCloudMaterial extends RawShaderMaterial {
 
     this.classification = DEFAULT_CLASSIFICATION;
 
-    this.defaultAttributeValues.normal = [0, 0, 0];
-    this.defaultAttributeValues.classification = [0, 0, 0];
-    this.defaultAttributeValues.indices = [0, 0, 0, 0];
+    const defaultAttributeValues = this.defaultAttributeValues as PotreeDefaultAttributeValues;
+
+    defaultAttributeValues.normal = [0, 0, 0];
+    defaultAttributeValues.classification = [0, 0, 0];
+    defaultAttributeValues.indices = [0, 0, 0, 0];
 
     this.vertexColors = true;
 
@@ -391,8 +396,8 @@ export class PointCloudMaterial extends RawShaderMaterial {
   }
 
   updateShaderSource(): void {
-    this.vertexShader = this.applyDefines(require('./shaders/pointcloud.vert').default);
-    this.fragmentShader = this.applyDefines(require('./shaders/pointcloud.frag').default);
+    this.vertexShader = this.applyDefines(vertexShaderSource);
+    this.fragmentShader = this.applyDefines(fragmentShaderSource);
 
     if (this.opacity === 1.0) {
       this.blending = NoBlending;
@@ -680,7 +685,13 @@ export class PointCloudMaterial extends RawShaderMaterial {
     }
 
     const texture = this.visibleNodesTexture;
-    if (texture) {
+    if (
+      texture &&
+      texture.image &&
+      typeof texture.image === 'object' &&
+      'data' in texture.image &&
+      texture.image.data instanceof Uint8Array
+    ) {
       texture.image.data.set(data);
       texture.needsUpdate = true;
     }
