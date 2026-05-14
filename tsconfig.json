@@ -1,13 +1,12 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
-    "baseUrl": "./src/",
     "sourceMap": true,
     "declaration": true,
     "declarationDir": "build/declarations",
     "rootDir": "./src",
     "module": "ES2020",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "strict": true,
     "noImplicitAny": true,
     "noImplicitReturns": true,
@@ -19,8 +18,7 @@
     "experimentalDecorators": true,
     "typeRoots": ["node_modules/@types"],
     "lib": ["ES2020", "DOM"],
-    "plugins": [],    
-    "ignoreDeprecations": "5.0"
+    "plugins": []
   },
   "include": ["src/**/*.ts"],
   "exclude": ["build", "node_modules"]
