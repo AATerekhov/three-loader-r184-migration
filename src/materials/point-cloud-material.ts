@@ -120,6 +120,46 @@ export interface IPointCloudMaterialUniforms {
   renderDepth: IUniform<boolean>;
 }
 
+export interface PointCloudMaterialDebugState {
+  colorRgba: boolean;
+  defines: string[];
+  flags: {
+    clipMode: ClipMode;
+    highlightPoint: boolean;
+    pointColorType: PointColorType;
+    pointOpacityType: PointOpacityType;
+    pointSizeType: PointSizeType;
+    shape: PointShape;
+    treeType: TreeType;
+    useClipBox: boolean;
+    useEDL: boolean;
+    useFilterByClassification: boolean;
+    useFilterByNormal: boolean;
+    usePointCloudMixing: boolean;
+    useTextureBlending: boolean;
+    weighted: boolean;
+  };
+  shader: {
+    fragmentLength: number;
+    glslVersion: string | null;
+    vertexLength: number;
+  };
+  uniforms: {
+    fov: number;
+    octreeSize: number;
+    screenHeight: number;
+    screenWidth: number;
+    size: number;
+    spacing: number;
+    visibleNodeTextureOffsets: number;
+  };
+  visibleNodesTexture: {
+    hasData: boolean;
+    height?: number;
+    width?: number;
+  };
+}
+
 const TREE_TYPE_DEFS = {
   [TreeType.OCTREE]: 'tree_type_octree',
   [TreeType.KDTREE]: 'tree_type_kdtree',
@@ -424,20 +464,72 @@ export class PointCloudMaterial extends RawShaderMaterial {
   }
 
   applyDefines(shaderSrc: string): string {
-    const parts: string[] = [];
+    return [...this.getShaderDefines(), shaderSrc].join('\n');
+  }
 
-    function define(value: string | undefined) {
+  getDebugState(): PointCloudMaterialDebugState {
+    const visibleNodesTextureImage = this.visibleNodesTexture?.image as
+      | { data?: unknown; height?: number; width?: number }
+      | null
+      | undefined;
+    const hasVisibleNodesData = visibleNodesTextureImage?.data instanceof Uint8Array;
+
+    return {
+      colorRgba: this.colorRgba,
+      defines: this.getShaderDefines(),
+      flags: {
+        clipMode: this.clipMode,
+        highlightPoint: this.highlightPoint,
+        pointColorType: this.pointColorType,
+        pointOpacityType: this.pointOpacityType,
+        pointSizeType: this.pointSizeType,
+        shape: this.shape,
+        treeType: this.treeType,
+        useClipBox: this.useClipBox,
+        useEDL: this.useEDL,
+        useFilterByClassification: this.useFilterByClassification,
+        useFilterByNormal: this.useFilterByNormal,
+        usePointCloudMixing: this.usePointCloudMixing,
+        useTextureBlending: this.useTextureBlending,
+        weighted: this.weighted,
+      },
+      shader: {
+        fragmentLength: this.fragmentShader.length,
+        glslVersion: this.glslVersion ?? null,
+        vertexLength: this.vertexShader.length,
+      },
+      uniforms: {
+        fov: this.fov,
+        octreeSize: this.octreeSize,
+        screenHeight: this.screenHeight,
+        screenWidth: this.screenWidth,
+        size: this.size,
+        spacing: this.spacing,
+        visibleNodeTextureOffsets: this.visibleNodeTextureOffsets.size,
+      },
+      visibleNodesTexture: {
+        hasData: hasVisibleNodesData,
+        height: visibleNodesTextureImage?.height,
+        width: visibleNodesTextureImage?.width,
+      },
+    };
+  }
+
+  private getShaderDefines(): string[] {
+    const defines: string[] = [];
+
+    const addDefine = (value: string | undefined) => {
       if (value) {
-        parts.push(`#define ${value}`);
+        defines.push(`#define ${value}`);
       }
-    }
+    };
 
-    define(TREE_TYPE_DEFS[this.treeType]);
-    define(SIZE_TYPE_DEFS[this.pointSizeType]);
-    define(SHAPE_DEFS[this.shape]);
-    define(COLOR_DEFS[this.pointColorType]);
-    define(CLIP_MODE_DEFS[this.clipMode]);
-    define(OPACITY_DEFS[this.pointOpacityType]);
+    addDefine(TREE_TYPE_DEFS[this.treeType]);
+    addDefine(SIZE_TYPE_DEFS[this.pointSizeType]);
+    addDefine(SHAPE_DEFS[this.shape]);
+    addDefine(COLOR_DEFS[this.pointColorType]);
+    addDefine(CLIP_MODE_DEFS[this.clipMode]);
+    addDefine(OPACITY_DEFS[this.pointOpacityType]);
 
     // We only perform gamma and brightness/contrast calculations per point if values are specified.
     if (
@@ -445,51 +537,49 @@ export class PointCloudMaterial extends RawShaderMaterial {
       this.rgbBrightness !== DEFAULT_RGB_BRIGHTNESS ||
       this.rgbContrast !== DEFAULT_RGB_CONTRAST
     ) {
-      define('use_rgb_gamma_contrast_brightness');
+      addDefine('use_rgb_gamma_contrast_brightness');
     }
 
     if (this.useFilterByNormal) {
-      define('use_filter_by_normal');
+      addDefine('use_filter_by_normal');
     }
 
     if (this.useFilterByClassification) {
-      define('use_filter_by_classification');
+      addDefine('use_filter_by_classification');
     }
 
     if (this.useEDL) {
-      define('use_edl');
+      addDefine('use_edl');
     }
 
     if (this.weighted) {
-      define('weighted_splats');
+      addDefine('weighted_splats');
     }
 
     if (this.numClipBoxes > 0) {
-      define('use_clip_box');
+      addDefine('use_clip_box');
     }
 
     if (this.highlightPoint) {
-      define('highlight_point');
+      addDefine('highlight_point');
     }
 
     if (this.useTextureBlending) {
-      define('use_texture_blending');
+      addDefine('use_texture_blending');
     }
 
     if (this.usePointCloudMixing) {
-      define('use_point_cloud_mixing');
+      addDefine('use_point_cloud_mixing');
     }
 
     if (this.colorRgba) {
-      define('color_rgba');
+      addDefine('color_rgba');
     }
 
-    define('MAX_POINT_LIGHTS 0');
-    define('MAX_DIR_LIGHTS 0');
+    addDefine('MAX_POINT_LIGHTS 0');
+    addDefine('MAX_DIR_LIGHTS 0');
 
-    parts.push(shaderSrc);
-
-    return parts.join('\n');
+    return defines;
   }
 
   setPointCloudMixingMode(mode: PointCloudMixingMode) {
