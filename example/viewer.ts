@@ -21,10 +21,11 @@ import {
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
-import { PointCloudOctree, Potree, PotreeVersion } from '../src';
+import { PointCloudMaterial, PointCloudOctree, Potree, PotreeVersion } from '../src';
 
 export class Viewer {
   public enableUpdate: boolean = true;
+  public useDebugMaterial: boolean = true;
 
   /**
    * The element where we will insert our canvas.
@@ -265,6 +266,10 @@ export class Viewer {
 
       const firstNode = pointCloud.visibleNodes[0];
       const position = firstNode?.sceneNode.geometry.getAttribute('position');
+      const attributeNames = firstNode
+        ? Object.keys(firstNode.sceneNode.geometry.attributes).join(',')
+        : 'none';
+      const materialState = pointCloud.material.getDebugState();
       const root = pointCloud.pcoGeometry.root;
       let geometryLoaded = 0;
       let geometryLoading = 0;
@@ -287,7 +292,7 @@ export class Viewer {
           ? ` | first: ${position.getX(0).toFixed(2)}, ${position.getY(0).toFixed(2)}, ${position.getZ(0).toFixed(2)}`
           : '';
       setStatus(
-        `Loaded | visible points: ${pointCloud.numVisiblePoints} | render nodes: ${pointCloud.visibleNodes.length} | geometry loaded/loading/failed: ${geometryLoaded}/${geometryLoading}/${geometryFailed} | root loaded: ${root.loaded} | loading: ${root.loading} | failed: ${root.failed}${sample}`,
+        `Loaded | material: ${this.useDebugMaterial ? 'debug' : 'potree'} | visible points: ${pointCloud.numVisiblePoints} | render nodes: ${pointCloud.visibleNodes.length} | geometry loaded/loading/failed: ${geometryLoaded}/${geometryLoading}/${geometryFailed} | root loaded: ${root.loaded} | loading: ${root.loading} | failed: ${root.failed} | attrs: ${attributeNames} | defines: ${materialState.defines.length} | colorRgba: ${materialState.colorRgba}${sample}`,
       );
       window.setTimeout(updateStatus, 1000);
     };
@@ -347,9 +352,7 @@ export class Viewer {
 
     for (const pointCloud of this.pointClouds) {
       for (const node of pointCloud.visibleNodes) {
-        this.ensureDebugColorAttribute(node.sceneNode.geometry);
-        node.sceneNode.material = this.getDebugPointMaterial(pointCloud);
-        node.sceneNode.onBeforeRender = () => {};
+        this.applyPointMaterial(pointCloud, node);
       }
 
       if (pointCloud.visibleNodes.length > 0 && !this.fittedPointClouds.has(pointCloud)) {
@@ -363,6 +366,22 @@ export class Viewer {
     const material = this.getDebugPointMaterial(pointCloud);
     material.size = size;
     material.needsUpdate = true;
+  }
+
+  setUseDebugMaterial(value: boolean): void {
+    this.useDebugMaterial = value;
+  }
+
+  private applyPointMaterial(pointCloud: PointCloudOctree, node: any): void {
+    if (this.useDebugMaterial) {
+      this.ensureDebugColorAttribute(node.sceneNode.geometry);
+      node.sceneNode.material = this.getDebugPointMaterial(pointCloud);
+      node.sceneNode.onBeforeRender = () => {};
+      return;
+    }
+
+    node.sceneNode.material = pointCloud.material;
+    node.sceneNode.onBeforeRender = PointCloudMaterial.makeOnBeforeRender(pointCloud, node);
   }
 
   private getDebugPointMaterial(pointCloud: PointCloudOctree): PointsMaterial {

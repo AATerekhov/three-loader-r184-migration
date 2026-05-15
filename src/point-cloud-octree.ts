@@ -76,9 +76,7 @@ export class PointCloudOctree extends PointCloudTree {
     this.updateMatrix();
 
     this.material =
-      material || pcoGeometry instanceof OctreeGeometry
-        ? new PointCloudMaterial({ colorRgba: true })
-        : new PointCloudMaterial();
+      material ?? new PointCloudMaterial({ colorRgba: pcoGeometry instanceof OctreeGeometry });
 
     this.initMaterial(this.material);
   }

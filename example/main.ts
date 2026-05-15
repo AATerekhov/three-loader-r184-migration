@@ -175,6 +175,15 @@ function setupUI(cfg: PointCloudsConfig): void {
 
   updateBtn.style.backgroundColor = '#00ff00';
 
+  const materialBtn = createButton('Debug material', (e: MouseEvent) => {
+    e.stopPropagation();
+    viewer.setUseDebugMaterial(!viewer.useDebugMaterial);
+    materialBtn.textContent = viewer.useDebugMaterial ? 'Debug material' : 'Potree material';
+    materialBtn.style.backgroundColor = viewer.useDebugMaterial ? '#00ff00' : '#ffcc00';
+  });
+
+  materialBtn.style.backgroundColor = '#00ff00';
+
   const slider = createSlider(cfg.version);
   const pointSizeSlider = createPointSizeSlider(cfg.version);
   const status = createStatus();
@@ -211,6 +220,7 @@ function setupUI(cfg: PointCloudsConfig): void {
   btnContainer.appendChild(unloadBtn);
   btnContainer.appendChild(loadBtn);
   btnContainer.append(updateBtn);
+  btnContainer.append(materialBtn);
   btnContainer.appendChild(slider);
   btnContainer.appendChild(pointSizeSlider);
   btnContainer.appendChild(status);
