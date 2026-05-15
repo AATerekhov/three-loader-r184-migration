@@ -21,11 +21,19 @@ import {
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
-import { PointCloudMaterial, PointCloudOctree, Potree, PotreeVersion } from '../src';
+import {
+  PointCloudMaterial,
+  PointCloudOctree,
+  PointColorType,
+  PointShape,
+  PointSizeType,
+  Potree,
+  PotreeVersion,
+} from '../src';
 
 export class Viewer {
   public enableUpdate: boolean = true;
-  public useDebugMaterial: boolean = true;
+  public useDebugMaterialFallback: boolean = false;
 
   /**
    * The element where we will insert our canvas.
@@ -269,7 +277,9 @@ export class Viewer {
       const attributeNames = firstNode
         ? Object.keys(firstNode.sceneNode.geometry.attributes).join(',')
         : 'none';
+      const shaderStatus = this.useDebugMaterialFallback ? 'debug fallback' : 'shader OK';
       const materialState = pointCloud.material.getDebugState();
+      const materialFlags = materialState.flags;
       const root = pointCloud.pcoGeometry.root;
       let geometryLoaded = 0;
       let geometryLoading = 0;
@@ -292,7 +302,7 @@ export class Viewer {
           ? ` | first: ${position.getX(0).toFixed(2)}, ${position.getY(0).toFixed(2)}, ${position.getZ(0).toFixed(2)}`
           : '';
       setStatus(
-        `Loaded | material: ${this.useDebugMaterial ? 'debug' : 'potree'} | visible points: ${pointCloud.numVisiblePoints} | render nodes: ${pointCloud.visibleNodes.length} | geometry loaded/loading/failed: ${geometryLoaded}/${geometryLoading}/${geometryFailed} | root loaded: ${root.loaded} | loading: ${root.loading} | failed: ${root.failed} | attrs: ${attributeNames} | defines: ${materialState.defines.length} | colorRgba: ${materialState.colorRgba}${sample}`,
+        `Loaded | ${shaderStatus} | color: ${PointColorType[materialFlags.pointColorType]} | size: ${PointSizeType[materialFlags.pointSizeType]} ${materialState.uniforms.size}px | shape: ${PointShape[materialFlags.shape]} | visible points: ${pointCloud.numVisiblePoints} | render nodes: ${pointCloud.visibleNodes.length} | geometry loaded/loading/failed: ${geometryLoaded}/${geometryLoading}/${geometryFailed} | root loaded: ${root.loaded} | loading: ${root.loading} | failed: ${root.failed} | attrs: ${attributeNames} | defines: ${materialState.defines.length} | colorRgba: ${materialState.colorRgba}${sample}`,
       );
       window.setTimeout(updateStatus, 1000);
     };
@@ -368,13 +378,13 @@ export class Viewer {
     material.needsUpdate = true;
   }
 
-  setUseDebugMaterial(value: boolean): void {
-    this.useDebugMaterial = value;
+  setUseDebugMaterialFallback(value: boolean): void {
+    this.useDebugMaterialFallback = value;
   }
 
   private applyPointMaterial(pointCloud: PointCloudOctree, node: any): void {
-    if (this.useDebugMaterial) {
-      this.ensureDebugColorAttribute(node.sceneNode.geometry);
+    if (this.useDebugMaterialFallback) {
+      this.ensureFallbackColorAttribute(node.sceneNode.geometry);
       node.sceneNode.material = this.getDebugPointMaterial(pointCloud);
       node.sceneNode.onBeforeRender = () => {};
       return;
@@ -403,7 +413,7 @@ export class Viewer {
     return material;
   }
 
-  private ensureDebugColorAttribute(geometry: any): void {
+  private ensureFallbackColorAttribute(geometry: any): void {
     if (geometry.getAttribute('color')) {
       return;
     }
