@@ -145,8 +145,7 @@ function setupPointCloud(
       setStatus('Loaded');
       pco.material.size = 4.0;
       pco.material.pointSizeType = PointSizeType.FIXED;
-      pco.material.pointColorType = PointColorType.COLOR;
-      pco.material.color.set(0xffd166);
+      pco.material.pointColorType = PointColorType.RGB;
 
       pco.material.clipMode = ClipMode.DISABLED;
       pco.showBoundingBox = true;
