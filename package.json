@@ -19,8 +19,17 @@
     "url": "https://github.com/pnext/three-loader/issues"
   },
   "license": "MIT",
-  "main": "build/potree.js",
-  "typings": "build/declarations/index.d.ts",
+  "main": "./build/potree.mjs",
+  "module": "./build/potree.mjs",
+  "types": "./build/declarations/index.d.ts",
+  "typings": "./build/declarations/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/declarations/index.d.ts",
+      "import": "./build/potree.mjs",
+      "default": "./build/potree.mjs"
+    }
+  },
   "files": [
     "build/**/*"
   ],

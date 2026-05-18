@@ -4,17 +4,24 @@ module.exports = {
   entry: './src/index.ts',
   output: {
     path: path.resolve(__dirname, 'build'),
-    filename: 'potree.js',
-    library: 'potree',
-    libraryTarget: 'umd',
-    umdNamedDefine: true,
+    filename: 'potree.mjs',
+    chunkFilename: '[id].potree.mjs',
+    library: {
+      type: 'module',
+    },
+  },
+  experiments: {
+    outputModule: true,
   },
   devtool: 'eval-cheap-source-map',
   stats: 'errors-only',
   resolve: {
     extensions: ['.ts', '.tsx', '.js'],
   },
-  externals: ['three'],
+  externalsType: 'module',
+  externals: {
+    three: 'three',
+  },
   module: {
     rules: [
       {
